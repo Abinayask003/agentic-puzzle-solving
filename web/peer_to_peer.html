@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Peer-to-Peer Architecture — Agent Puzzle Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#101210; --panel:#171a17; --panel2:#1d211d; --line:#2b2f2b;
+    --text:#ece8dd; --text-dim:#8d8f86; --text-faint:#5c5e58;
+    --accent:#e79f8c; --accent-dim:#4a2e26; --accent-glow:#ffc4ae;
+    --danger:#e2726b; --success:#7ec98f;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  header{padding:36px 32px 24px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;}
+  h1{margin:0 0 8px;font-size:clamp(24px,3.4vw,34px);font-weight:700;letter-spacing:-0.01em;}
+  .sub{color:var(--text-dim);max-width:660px;line-height:1.55;font-size:14.5px;}
+  main{padding:28px 32px 60px;max-width:1180px;margin:0 auto;}
+  .grid{display:grid;grid-template-columns:1.15fr 1fr;gap:22px;}
+  @media (max-width:920px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;}
+  .card h2{margin:0 0 14px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-weight:500;}
+
+  #network{width:100%;height:auto;display:block;}
+  .mesh-edge{stroke:var(--line);stroke-width:0.6;opacity:.5;}
+  .agent-box{fill:var(--panel2);stroke:var(--line);stroke-width:1;transition:stroke .25s, fill .25s;}
+  .agent-box.active{stroke:var(--accent-glow);fill:#3a2620;}
+  .agent-label{font-family:'JetBrains Mono',monospace;font-size:11px;fill:var(--text);}
+  .pulse{stroke:var(--accent);stroke-width:1.6;opacity:0;transition:opacity .18s;}
+  .pulse.on{opacity:.9;}
+
+  #board{display:grid;grid-template-columns:repeat(8,1fr);width:100%;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--line);}
+  .cell{display:flex;align-items:center;justify-content:center;font-size:clamp(14px,2.6vw,22px);}
+  .cell.light{background:#23261f;}
+  .cell.dark{background:#181a15;}
+  .cell.queen{color:var(--accent-glow);text-shadow:0 0 12px rgba(255,196,174,.5);}
+
+  .stats{display:flex;gap:18px;margin-top:16px;flex-wrap:wrap;}
+  .stat{flex:1;min-width:100px;background:var(--panel2);border-radius:8px;padding:12px 14px;}
+  .stat .num{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;}
+  .stat .lbl{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+  .stat.ok .num{color:var(--success);}
+
+  .controls{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap;}
+  button{font-family:'JetBrains Mono',monospace;background:#2f1f1a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;transition:background .15s,border-color .15s;}
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent);color:#2b140c;font-weight:700;border-color:var(--accent);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button:focus-visible, input:focus-visible{outline:2px solid var(--accent-glow);outline-offset:2px;}
+  .speed{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);margin-left:auto;}
+  input[type=range]{accent-color:var(--accent);}
+
+  #log{margin-top:22px;height:180px;overflow-y:auto;background:#0c0e0c;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:var(--text-dim);}
+  #log div span.tag{color:var(--accent-glow);}
+  #log::-webkit-scrollbar{width:8px;}
+  #log::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Multi-agent architecture lab · 3 of 3</div>
+  <h1>Peer-to-peer — fully autonomous mesh</h1>
+  <p class="sub">No coordinator anywhere. Every queen agent is directly connected to every other agent. Each one independently reads the shared board, decides its own move, and broadcasts that move straight to all peers at once.</p>
+</header>
+<main>
+  <div class="grid">
+    <div class="card">
+      <h2>Agent network (fully connected mesh)</h2>
+      <svg id="network" viewBox="0 0 520 300" role="img" aria-label="Eight queen agents arranged in a circle, all directly connected to each other"></svg>
+    </div>
+    <div class="card">
+      <h2>Live board (8 autonomous queen agents)</h2>
+      <div id="board"></div>
+      <div class="stats">
+        <div class="stat"><div class="num mono" id="statRound">0</div><div class="lbl">Tick</div></div>
+        <div class="stat" id="statConfWrap"><div class="num mono" id="statConf">–</div><div class="lbl">Conflicts</div></div>
+        <div class="stat"><div class="num mono" id="statStatus">idle</div><div class="lbl">Status</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:22px;">
+    <h2>Controls</h2>
+    <div class="controls">
+      <button class="primary" id="btnPlay">▶ Play</button>
+      <button id="btnStep">Step</button>
+      <button id="btnReset">Reset</button>
+      <div class="speed">
+        <label for="speed">Speed</label>
+        <input type="range" id="speed" min="1" max="10" value="7">
+      </div>
+    </div>
+    <div id="log" aria-live="polite"></div>
+  </div>
+</main>
+
+<script>
+const N = 8;
+const svgNS = "http://www.w3.org/2000/svg";
+let board, timer=null, tick=0, solved=false;
+let positions = [];
+
+function conflictsFor(b, col, row){
+  let c=0;
+  for(let oc=0; oc<N; oc++){
+    if(oc===col) continue;
+    const or_ = b[oc];
+    if(or_===row || Math.abs(or_-row)===Math.abs(oc-col)) c++;
+  }
+  return c;
+}
+function totalConflicts(b){
+  let s=0;
+  for(let c=0;c<N;c++) s+=conflictsFor(b,c,b[c]);
+  return s/2;
+}
+
+function log(html){
+  const el = document.getElementById('log');
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderBoard(){
+  const el = document.getElementById('board');
+  el.innerHTML='';
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell ' + (((r+c)%2===0)?'light':'dark') + (board[c]===r?' queen':'');
+      cell.textContent = board[c]===r ? '♛' : '';
+      el.appendChild(cell);
+    }
+  }
+  const conf = totalConflicts(board);
+  document.getElementById('statConf').textContent = conf;
+  document.getElementById('statRound').textContent = tick;
+  const wrap = document.getElementById('statConfWrap');
+  wrap.className = 'stat ' + (conf===0 ? 'ok' : '');
+  return conf;
+}
+
+function buildNetwork(){
+  const svg = document.getElementById('network');
+  svg.innerHTML='';
+  const cx=260, cy=150, r=105;
+  positions = [];
+  for(let i=0;i<N;i++){
+    const angle = (Math.PI*2*i)/N - Math.PI/2;
+    positions.push({x: cx + r*Math.cos(angle), y: cy + r*Math.sin(angle)});
+  }
+  // full mesh (faint, static)
+  for(let i=0;i<N;i++){
+    for(let j=i+1;j<N;j++){
+      const line = document.createElementNS(svgNS,'line');
+      line.setAttribute('x1', positions[i].x); line.setAttribute('y1', positions[i].y);
+      line.setAttribute('x2', positions[j].x); line.setAttribute('y2', positions[j].y);
+      line.setAttribute('class','mesh-edge');
+      svg.appendChild(line);
+    }
+  }
+  // per-agent pulse edges (from agent i to all others), hidden by default
+  for(let i=0;i<N;i++){
+    for(let j=0;j<N;j++){
+      if(i===j) continue;
+      const pulse = document.createElementNS(svgNS,'line');
+      pulse.setAttribute('x1', positions[i].x); pulse.setAttribute('y1', positions[i].y);
+      pulse.setAttribute('x2', positions[j].x); pulse.setAttribute('y2', positions[j].y);
+      pulse.setAttribute('class','pulse');
+      pulse.id = 'pulse-'+i+'-'+j;
+      svg.appendChild(pulse);
+    }
+  }
+  // nodes on top
+  positions.forEach((p,i)=>{
+    const g = document.createElementNS(svgNS,'g');
+    g.innerHTML = `<rect id="agent-${i}" class="agent-box" x="${p.x-24}" y="${p.y-18}" width="48" height="36" rx="7"></rect>
+      <text class="agent-label" x="${p.x}" y="${p.y+4}" text-anchor="middle">Q${i}</text>`;
+    svg.appendChild(g);
+  });
+}
+
+function broadcastFlash(fromIdx, cb){
+  document.getElementById('agent-'+fromIdx).classList.add('active');
+  for(let j=0;j<N;j++){
+    if(j===fromIdx) continue;
+    document.getElementById('pulse-'+fromIdx+'-'+j).classList.add('on');
+  }
+  setTimeout(()=>{
+    document.getElementById('agent-'+fromIdx).classList.remove('active');
+    for(let j=0;j<N;j++){
+      if(j===fromIdx) continue;
+      document.getElementById('pulse-'+fromIdx+'-'+j).classList.remove('on');
+    }
+    if(cb) cb();
+  }, 240);
+}
+
+function stepOnce(){
+  if(solved) return;
+  tick++;
+
+  // one randomly chosen peer agent takes its turn, fully autonomously
+  const col = Math.floor(Math.random()*N);
+  const myRow = board[col];
+  const myConf = conflictsFor(board, col, myRow);
+
+  document.getElementById('statStatus').textContent = 'agent '+col+' evaluating';
+
+  if(myConf > 0){
+    let bestConf = myConf;
+    let bestRows = [myRow];
+    for(let row=0; row<N; row++){
+      const c = conflictsFor(board, col, row);
+      if(c < bestConf){ bestConf=c; bestRows=[row]; }
+      else if(c===bestConf && !bestRows.includes(row)) bestRows.push(row);
+    }
+    let newRow;
+    if(Math.random() < 0.12){
+      newRow = Math.floor(Math.random()*N); // random walk step, purely local decision
+    } else {
+      newRow = bestRows[Math.floor(Math.random()*bestRows.length)];
+    }
+    if(newRow !== myRow){
+      board[col] = newRow;
+      const conf = renderBoard();
+      log(`<span class="tag">[agent ${col}]</span> moved to row ${newRow} · broadcast to all peers · conflicts = ${conf}`);
+      broadcastFlash(col);
+      if(conf === 0){
+        solved = true;
+        document.getElementById('statStatus').textContent = 'converged';
+        log(`<b>all peers converged</b> after ${tick} ticks`);
+        stopPlay();
+        return;
+      }
+    } else {
+      renderBoard();
+      log(`<span class="tag">[agent ${col}]</span> already at its best row, no move`);
+    }
+  } else {
+    renderBoard();
+    log(`<span class="tag">[agent ${col}]</span> has zero local conflicts, stays put`);
+  }
+  document.getElementById('statStatus').textContent = 'running';
+}
+
+function reset(){
+  stopPlay();
+  board = Array.from({length:N}, ()=>Math.floor(Math.random()*N));
+  tick = 0; solved = false;
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('statStatus').textContent = 'idle';
+  renderBoard();
+  log(`new random board initialised · conflicts = ${totalConflicts(board)}`);
+}
+
+function stopPlay(){
+  if(timer){ clearInterval(timer); timer=null; }
+  document.getElementById('btnPlay').textContent = '▶ Play';
+}
+function startPlay(){
+  if(solved) return;
+  const speed = Number(document.getElementById('speed').value);
+  const delay = 500 - speed*40;
+  timer = setInterval(stepOnce, Math.max(delay,40));
+  document.getElementById('btnPlay').textContent = '⏸ Pause';
+}
+
+document.getElementById('btnPlay').addEventListener('click', ()=>{
+  if(timer) stopPlay(); else startPlay();
+});
+document.getElementById('btnStep').addEventListener('click', ()=>{ stopPlay(); stepOnce(); });
+document.getElementById('btnReset').addEventListener('click', reset);
+document.getElementById('speed').addEventListener('input', ()=>{ if(timer){ stopPlay(); startPlay(); } });
+
+buildNetwork();
+reset();
+</script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hierarchical Architecture — Agent Puzzle Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#101210; --panel:#171a17; --panel2:#1d211d; --line:#2b2f2b;
+    --text:#ece8dd; --text-dim:#8d8f86; --text-faint:#5c5e58;
+    --accent:#a99bf0; --accent-dim:#4a4270; --accent-glow:#c9befa;
+    --worker:#6fd9b8; --worker-dim:#294a3f;
+    --danger:#e2726b; --success:#7ec98f;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  header{padding:36px 32px 24px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;}
+  h1{margin:0 0 8px;font-size:clamp(24px,3.4vw,34px);font-weight:700;letter-spacing:-0.01em;}
+  .sub{color:var(--text-dim);max-width:640px;line-height:1.55;font-size:14.5px;}
+  main{padding:28px 32px 60px;max-width:1180px;margin:0 auto;}
+  .grid{display:grid;grid-template-columns:1.15fr 1fr;gap:22px;}
+  @media (max-width:920px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;}
+  .card h2{margin:0 0 14px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-weight:500;}
+
+  /* network diagram */
+  #network{width:100%;height:auto;display:block;}
+  .agent-box{fill:var(--panel2);stroke:var(--line);stroke-width:1;transition:stroke .25s, fill .25s;}
+  .agent-box.active{stroke:var(--accent-glow);fill:#26213c;}
+  .agent-box.worker{stroke:var(--line);}
+  .agent-box.worker.active{stroke:var(--worker);fill:#173229;}
+  .agent-label{font-family:'JetBrains Mono',monospace;font-size:11px;fill:var(--text);}
+  .agent-sub{font-family:'JetBrains Mono',monospace;font-size:9.5px;fill:var(--text-dim);}
+  .edge{stroke:var(--line);stroke-width:1;}
+  .pulse{stroke:var(--accent-glow);stroke-width:2;opacity:0;transition:opacity .15s;}
+  .pulse.on{opacity:1;}
+  .pulse.worker-pulse{stroke:var(--worker);}
+
+  /* board */
+  #board{display:grid;grid-template-columns:repeat(8,1fr);width:100%;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--line);}
+  .cell{display:flex;align-items:center;justify-content:center;font-size:clamp(14px,2.6vw,22px);}
+  .cell.light{background:#23261f;}
+  .cell.dark{background:#181a15;}
+  .cell.queen{color:var(--accent-glow);text-shadow:0 0 12px rgba(201,190,250,.5);}
+
+  .stats{display:flex;gap:18px;margin-top:16px;flex-wrap:wrap;}
+  .stat{flex:1;min-width:100px;background:var(--panel2);border-radius:8px;padding:12px 14px;}
+  .stat .num{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;}
+  .stat .lbl{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+  .stat.ok .num{color:var(--success);}
+  .stat.bad .num{color:var(--danger);}
+
+  .controls{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap;}
+  button{font-family:'JetBrains Mono',monospace;background:var(--accent-dim);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;transition:background .15s,border-color .15s;}
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent);color:#161320;font-weight:700;border-color:var(--accent);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button:focus-visible, input:focus-visible{outline:2px solid var(--accent-glow);outline-offset:2px;}
+  .speed{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);margin-left:auto;}
+  input[type=range]{accent-color:var(--accent);}
+
+  #log{margin-top:22px;height:180px;overflow-y:auto;background:#0c0e0c;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:var(--text-dim);}
+  #log div span.tag-m{color:var(--accent-glow);}
+  #log div span.tag-w{color:var(--worker);}
+  #log::-webkit-scrollbar{width:8px;}
+  #log::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Multi-agent architecture lab · 1 of 3</div>
+  <h1>Hierarchical — master &amp; workers</h1>
+  <p class="sub">One master agent holds the board and makes every decision. Worker agents each own a single queen: they can only propose a move — the master alone decides what gets applied. No worker ever talks to another worker.</p>
+</header>
+<main>
+  <div class="grid">
+    <div class="card">
+      <h2>Agent network</h2>
+      <svg id="network" viewBox="0 0 520 300" role="img" aria-label="Master agent connected to eight worker agents in a star topology"></svg>
+    </div>
+    <div class="card">
+      <h2>Live board (8 queens, one per worker)</h2>
+      <div id="board"></div>
+      <div class="stats">
+        <div class="stat"><div class="num mono" id="statRound">0</div><div class="lbl">Round</div></div>
+        <div class="stat" id="statConfWrap"><div class="num mono" id="statConf">–</div><div class="lbl">Conflicts</div></div>
+        <div class="stat"><div class="num mono" id="statStatus">idle</div><div class="lbl">Status</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:22px;">
+    <h2>Controls</h2>
+    <div class="controls">
+      <button class="primary" id="btnPlay">▶ Play</button>
+      <button id="btnStep">Step</button>
+      <button id="btnReset">Reset</button>
+      <div class="speed">
+        <label for="speed">Speed</label>
+        <input type="range" id="speed" min="1" max="10" value="5">
+      </div>
+    </div>
+    <div id="log" aria-live="polite"></div>
+  </div>
+</main>
+
+<script>
+const N = 8;
+const svgNS = "http://www.w3.org/2000/svg";
+let board, timer=null, round=0, solved=false, stagnant=0, prevConf=null;
+
+function conflictsFor(b, col, row){
+  let c=0;
+  for(let oc=0; oc<N; oc++){
+    if(oc===col) continue;
+    const or_ = b[oc];
+    if(or_===row || Math.abs(or_-row)===Math.abs(oc-col)) c++;
+  }
+  return c;
+}
+function totalConflicts(b){
+  let s=0;
+  for(let c=0;c<N;c++) s+=conflictsFor(b,c,b[c]);
+  return s/2;
+}
+
+function log(html){
+  const el = document.getElementById('log');
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderBoard(){
+  const el = document.getElementById('board');
+  el.innerHTML='';
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell ' + (((r+c)%2===0)?'light':'dark') + (board[c]===r?' queen':'');
+      cell.textContent = board[c]===r ? '♛' : '';
+      el.appendChild(cell);
+    }
+  }
+  const conf = totalConflicts(board);
+  document.getElementById('statConf').textContent = conf;
+  document.getElementById('statRound').textContent = round;
+  const wrap = document.getElementById('statConfWrap');
+  wrap.className = 'stat ' + (conf===0 ? 'ok' : '');
+  return conf;
+}
+
+// ---- network diagram ----
+function buildNetwork(){
+  const svg = document.getElementById('network');
+  svg.innerHTML='';
+  const masterPos = {x:260, y:50};
+  const positions = [];
+  for(let i=0;i<N;i++){
+    positions.push({x: 30 + i*62, y: 220});
+  }
+  // edges
+  positions.forEach((p,i)=>{
+    const line = document.createElementNS(svgNS,'line');
+    line.setAttribute('x1', masterPos.x); line.setAttribute('y1', masterPos.y+26);
+    line.setAttribute('x2', p.x+22); line.setAttribute('y2', p.y-2);
+    line.setAttribute('class','edge');
+    line.id = 'edge-'+i;
+    svg.appendChild(line);
+
+    const pulse = document.createElementNS(svgNS,'line');
+    pulse.setAttribute('x1', masterPos.x); pulse.setAttribute('y1', masterPos.y+26);
+    pulse.setAttribute('x2', p.x+22); pulse.setAttribute('y2', p.y-2);
+    pulse.setAttribute('class','pulse');
+    pulse.id = 'pulse-'+i;
+    svg.appendChild(pulse);
+  });
+  // master node
+  const mg = document.createElementNS(svgNS,'g');
+  mg.innerHTML = `<rect id="masterBox" class="agent-box" x="${masterPos.x-70}" y="${masterPos.y-24}" width="140" height="50" rx="8"></rect>
+    <text class="agent-label" x="${masterPos.x}" y="${masterPos.y-2}" text-anchor="middle">Master agent</text>
+    <text class="agent-sub" x="${masterPos.x}" y="${masterPos.y+14}" text-anchor="middle">holds board · decides</text>`;
+  svg.appendChild(mg);
+  // worker nodes
+  positions.forEach((p,i)=>{
+    const g = document.createElementNS(svgNS,'g');
+    g.innerHTML = `<rect id="worker-${i}" class="agent-box worker" x="${p.x-22}" y="${p.y-24}" width="44" height="44" rx="7"></rect>
+      <text class="agent-label" x="${p.x}" y="${p.y-6}" text-anchor="middle">W${i}</text>
+      <text class="agent-sub" x="${p.x}" y="${p.y+10}" text-anchor="middle">col ${i}</text>`;
+    svg.appendChild(g);
+  });
+}
+
+function flashEdge(i, isWorkerColor, cb){
+  const pulse = document.getElementById('pulse-'+i);
+  if(isWorkerColor) pulse.classList.add('worker-pulse'); else pulse.classList.remove('worker-pulse');
+  pulse.classList.add('on');
+  const box = document.getElementById('worker-'+i);
+  box.classList.add('active');
+  document.getElementById('masterBox').classList.add('active');
+  setTimeout(()=>{
+    pulse.classList.remove('on');
+    box.classList.remove('active');
+    document.getElementById('masterBox').classList.remove('active');
+    if(cb) cb();
+  }, 260);
+}
+
+// ---- simulation step (mirrors hierarchical_puzzle.py) ----
+function stepOnce(){
+  if(solved) return;
+  round++;
+  document.getElementById('statStatus').textContent = 'broadcast';
+
+  // 1. master broadcasts board -> every worker proposes best row
+  const proposals = [];
+  for(let col=0; col<N; col++){
+    const curRow = board[col];
+    let bestConf = conflictsFor(board, col, curRow);
+    let bestRows = [curRow];
+    for(let row=0; row<N; row++){
+      const c = conflictsFor(board, col, row);
+      if(c < bestConf){ bestConf=c; bestRows=[row]; }
+      else if(c===bestConf && !bestRows.includes(row)) bestRows.push(row);
+    }
+    const chosen = bestRows[Math.floor(Math.random()*bestRows.length)];
+    proposals.push({col, row:chosen, conflicts:bestConf});
+  }
+
+  // 2. master picks the best proposal (random tie-break)
+  const minConf = Math.min(...proposals.map(p=>p.conflicts));
+  const candidates = proposals.filter(p=>p.conflicts===minConf);
+  const best = candidates[Math.floor(Math.random()*candidates.length)];
+  board[best.col] = best.row;
+
+  const conf = renderBoard();
+  log(`<span class="tag-m">[master]</span> round ${round} · <span class="tag-w">worker ${best.col}</span> → row ${best.row} · conflicts = ${conf}`);
+  flashEdge(best.col, true);
+
+  if(conf === prevConf) stagnant++; else stagnant=0;
+  prevConf = conf;
+
+  if(stagnant >= 15 && conf !== 0){
+    const kickCol = Math.floor(Math.random()*N);
+    board[kickCol] = Math.floor(Math.random()*N);
+    log(`<span class="tag-m">[master]</span> plateau detected → forcing worker ${kickCol} to a random row`);
+    stagnant = 0;
+    renderBoard();
+  }
+
+  if(conf === 0){
+    solved = true;
+    document.getElementById('statStatus').textContent = 'solved';
+    log(`<span class="tag-m">[master]</span> <b>solution found</b> after ${round} rounds`);
+    stopPlay();
+  } else {
+    document.getElementById('statStatus').textContent = 'running';
+  }
+}
+
+function reset(){
+  stopPlay();
+  board = Array.from({length:N}, ()=>Math.floor(Math.random()*N));
+  round = 0; solved = false; stagnant = 0; prevConf = totalConflicts(board);
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('statStatus').textContent = 'idle';
+  renderBoard();
+  log(`<span class="tag-m">[master]</span> new random board initialised · conflicts = ${prevConf}`);
+}
+
+function stopPlay(){
+  if(timer){ clearInterval(timer); timer=null; }
+  document.getElementById('btnPlay').textContent = '▶ Play';
+}
+function startPlay(){
+  if(solved) return;
+  const speed = Number(document.getElementById('speed').value);
+  const delay = 900 - speed*80;
+  timer = setInterval(stepOnce, Math.max(delay,80));
+  document.getElementById('btnPlay').textContent = '⏸ Pause';
+}
+
+document.getElementById('btnPlay').addEventListener('click', ()=>{
+  if(timer) stopPlay(); else startPlay();
+});
+document.getElementById('btnStep').addEventListener('click', ()=>{ stopPlay(); stepOnce(); });
+document.getElementById('btnReset').addEventListener('click', reset);
+document.getElementById('speed').addEventListener('input', ()=>{ if(timer){ stopPlay(); startPlay(); } });
+
+buildNetwork();
+reset();
+</script>
+</body>
+</html>
